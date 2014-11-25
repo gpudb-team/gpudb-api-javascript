@@ -1,2 +1,0 @@
-gpudb-javascript-api
-====================
