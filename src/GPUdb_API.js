@@ -44,8 +44,6 @@ function GPUdb() {
 	this._sets = [];
 	this._types = {};
 	this._connect_state = "closed";
-	this._user= "";
-	this._passwd = "";
 	this.logged = false;
 	this.socket = $.atmosphere;
 	this.subSocket = null;
@@ -72,10 +70,15 @@ function GPUdb() {
 			success: function(data) {
 				var endTime = new Date();
 				var endMs = endTime.getTime();
-				data_arr = JSON.parse(data.data_str.replace(/\\U/g,"\\u"));
 				this.consoleLog(endpoint + " took " + ((endMs - startMs) / 1000) + " seconds (at " + endTime.toISOString() + ")");
 				this.consoleLog(endpoint + " returned: " + JSON.stringify(data));
-				if (succeeded) succeeded(data_arr);
+
+				if (data.status === "OK") {
+					data_arr = JSON.parse(data.data_str.replace(/\\U/g,"\\u"));
+					if (succeeded) succeeded(data_arr);
+				} else if (failed) {
+					failed(data, data.status, data.message);
+				}
 			},
 			error: function(xhr, status, error) {
 				console.log("GPUdb " + endpoint + " call failed (" + status + "): " + error);
@@ -84,7 +87,7 @@ function GPUdb() {
 		});
 
 		return data_arr;
-    }
+    };
 
 	this.consoleLog = function(str) {
 		if (this.verbose) console.log(str);
@@ -110,33 +113,25 @@ function GPUdb() {
 	this.__defineGetter__("sets", function(){
 		this.consoleLog("define getter of sets called");
 		return this._sets;
-  	});
+	});
 
-  	this.connect = function(connect_str) {
-  		if(this._connect_state == "closed") {
-  			this._connect_state = "open";
-  		}
-
-		this._server_url = connect_str;
-		this.consoleLog("opening connection to: " + this._server_url);
-  	};
-	
-  	this.connect = function(connect_str, user, password) {
-  		if(this._connect_state == "closed") {
-  			this._connect_state = "open";
-  		}
-		console.log("using authentication connection");
+	this.connect = function(connect_str, user, password) {
+		if(this._connect_state === "closed") {
+			this._connect_state = "open";
+		}
 
 		this._server_url = connect_str;
-		this._user = user;
-		this._password = password;
-		
-		$.ajaxSetup({
-		    headers: { 'Authorization': "Basic " + Base64.encode(this._user + ":" + this._password) }
-		});
-		
+
+		if (user) {
+			this.consoleLog("using authentication connection");
+
+			$.ajaxSetup({
+				headers: { 'Authorization': "Basic " + Base64.encode(user + ":" + password) }
+			});
+		}
+
 		this.consoleLog("opening connection to: " + this._server_url);
-  	};
+	};
 
     this.add = function(set_id, object) {
 		var fdatum = {
@@ -147,7 +142,7 @@ function GPUdb() {
 		};
 
 		return this.make_request("/add", fdatum);
-    }
+    };
   
     this.boundingBox = function(set_id, min_x, min_y, max_x, max_y, x_map, y_map, user_auth, dest_id, succeeded, failed) {
         var fdatum = {
@@ -163,7 +158,7 @@ function GPUdb() {
 		};
         
         return this.make_request("/boundingbox", fdatum, succeeded, failed);
-    }
+    };
 
     this.clear = function(set_id, user_auth, succeeded, failed) {
 		var fdatum = {
@@ -172,7 +167,7 @@ function GPUdb() {
 		};
 
 		return this.make_request("/clear", fdatum, succeeded, failed);
-    }
+    };
   
     this.createParentSet = function(set_id) {
 		var tempset = new Set();
@@ -193,7 +188,7 @@ function GPUdb() {
 		};
 
 		return this.make_request("/filterbybounds", fdatum, succeeded, failed);
-    }
+    };
 	
     this.filterByList = function(filter_map, dest_id, set_id, user_auth, succeeded, failed) {
 		var fdatum = {
@@ -204,21 +199,21 @@ function GPUdb() {
 		};
 
 		return this.make_request("/filterbylist", fdatum, succeeded, failed);
-    }
+    };
 	
-	this.filterByNai = function(result_set_id, set_id, x_attribute, y_attribute, x_vector, y_vector, user_auth, succeeded, failed) {
-		var fdatum = {
-			result_set_id: result_set_id,
-			set_id: set_id,
-			x_attribute: x_attribute,
-			x_vector: x_vector,
-			y_attribute: y_attribute,
-			y_vector: y_vector,
-			user_auth_string: user_auth || this._user_auth
-		};
+    this.filterByNai = function(result_set_id, set_id, x_attribute, y_attribute, x_vector, y_vector, user_auth, succeeded, failed) {
+            var fdatum = {
+                    result_set_id: result_set_id,
+                    set_id: set_id,
+                    x_attribute: x_attribute,
+                    x_vector: x_vector,
+                    y_attribute: y_attribute,
+                    y_vector: y_vector,
+                    user_auth_string: user_auth || this._user_auth
+            };
 
-		return this.make_request("/filterbynai", fdatum, succeeded, failed);
-	}
+            return this.make_request("/filterbynai", fdatum, succeeded, failed);
+    };
 
     this.filterByRadius = function(result_set_id, set_id, x_attribute, y_attribute, x_center, y_center, radius, user_auth, succeeded, failed) {
 		var fdatum = {
@@ -233,7 +228,7 @@ function GPUdb() {
 		};
 
 		return this.make_request("/filterbyradius", fdatum, succeeded, failed);
-    }
+    };
     
     this.filterByString = function(expression, mode, options, set_id, attributes, result_set_id, user_auth, succeeded, failed) {
     	var fdatum = {
@@ -247,11 +242,11 @@ function GPUdb() {
 		};
     	
     	return this.make_request("/filterbystring", fdatum, succeeded, failed);
-    }
-
+    };
+    
     this.filterByTrackRequest = function(set_id, track_id, spatial_radius, time_radius, spatial_distance_metric, target_track_ids,
         result_set_id, user_auth, succeeded, failed) {
-        if(spatial_distance_metric != null)
+        if(spatial_distance_metric !== null)
             spatial_distance_metric = "great_circle";
         var fdatum = {
             set_id: set_id,
@@ -266,7 +261,7 @@ function GPUdb() {
             user_auth_string: user_auth || this._user_auth
         };
         return this.make_request("/filterbytrack ", fdatum, succeeded, failed);
-    }
+    };
     
     this.filterByValue = function(set_id, attribute, val, result_set_id, user_auth, succeeded, failed) {
     	var fdatum = {
@@ -280,7 +275,7 @@ function GPUdb() {
 		};
     	
     	return this.make_request("/filterbyvalue", fdatum, succeeded, failed);
-    }
+    };
     
     this.getSet = function(set_id, start, end, user_auth, succeeded, failed) {
 		var fdatum = {
@@ -308,17 +303,18 @@ function GPUdb() {
 			
 			return data_arr;
 		}
-    }
-
+    };
+        
     this.groupBy = function(set_id, attributes, user_auth) {
 		var fdatum = {
 			set_id: set_id,
 			attributes:  attributes,
+			value_attribute: '',
 			user_auth_string: user_auth || this._user_auth
 		};
 
-		return this.make_request("/groupby", fdatum);
-    }
+		return this.make_request("/groupbyvalue", fdatum);
+    };
 
     this.groupByValue = function(set_id, attributes, value_attribute, user_auth) {
 		var fdatum = {
@@ -329,35 +325,23 @@ function GPUdb() {
 		};
 
 		return this.make_request("/groupbyvalue", fdatum);
-    }
+    };
 
-    this.histogram = function(set_id, attribute,  start, end, interval, user_auth, succeeded, failed) {
+    this.histogram = function(set_id, attribute, start, end, interval, user_auth, succeeded, failed, value_attribute) {
+		var params = {};
+		if (value_attribute) { params["value_attribute"] = value_attribute; }
 		var fdatum = {
 			set_id: set_id,
         	attribute: attribute,
         	start: start,
         	end: end,
         	interval: interval,
-        	params: {},
+        	params: params,
 			user_auth_string: user_auth || this._user_auth
 		};
 
 		return this.make_request("/histogram", fdatum, succeeded, failed);
-    }
-	
-    this.histogram = function(set_id, attribute, value_attribute,  start, end, interval, user_auth, succeeded, failed) {
-		var fdatum = {
-			set_id: set_id,
-        	attribute: attribute,
-        	start: start,
-        	end: end,
-        	interval: interval,
-        	params: { "value_attribute" : value_attribute},
-			user_auth_string: user_auth || this._user_auth
-		};
-
-		return this.make_request("/histogram", fdatum, succeeded, failed);
-    }
+    };
 
     this.maxmin = function(attribute, set_id, user_auth, succeeded, failed) {
     	var fdatum = {
@@ -367,7 +351,7 @@ function GPUdb() {
 		};
     	
     	return this.make_request("/maxmin", fdatum, succeeded, failed);
-    }
+    };
     
     this.newSet = function(type_object, parent_set, set_id) {
 		var fdatum = {};
@@ -384,12 +368,12 @@ function GPUdb() {
         tempset.type_id = type_object.type_id;
         tempset._client = this;
 
-        if(parent_set != null) {
+        if(parent_set !== null) {
 			parent_set.addChild(tempset);
         }
 
         return tempset;
-    }
+    };
 
     this.populateFullTracks = function(set_id, world_set_id, result_set_id, reserved, user_auth, succeeded, failed) {
         var fdatum = {
@@ -401,7 +385,7 @@ function GPUdb() {
         };
         return this.make_request("/populatefulltracks ", fdatum, succeeded, failed);
 
-    }
+    };
 
     this.registerTriggerNai = function(trigger_name, set_id, x_attribute, y_attribute, x_vector, y_vector, id_attr) {
 		var fdatum = {
@@ -416,7 +400,7 @@ function GPUdb() {
 
 		var res = this.make_request("/registertriggernai", fdatum);
 		connect(res.trigger_id);
-    }
+    };
 
     this.registerType = function(object, stype, tlabel, annotation_id) {
 		var type_def = {};
@@ -455,12 +439,12 @@ function GPUdb() {
 		};
 
 		return this.make_request("/select", fdatum, succeeded, failed);
-    }
+    };
 
     this.setInfo = function(set_id, succeeded, failed) {
 		var fdatum = {set_ids: [set_id]};
 		return this.make_request("/setinfo", fdatum, succeeded, failed);
-    }
+    };
 
     this.statistics = function(set_id, stats, attribute, user_auth, succeeded, failed) {
 		var fdatum = {
@@ -472,17 +456,17 @@ function GPUdb() {
 		};
 
 		return this.make_request("/statistics", fdatum, succeeded, failed);
-    }
+    };
 
     this.stats = function(set_id) {
 		var fdatum = {set_id: set_id};
 		return this.make_request("/stats", fdatum).count_map[set_id];
-    }
+    };
 
     this.status = function(set_id, succeeded, failed) {
 		var fdatum = {set_id: set_id};
 		return this.make_request("/status", fdatum, succeeded, failed);
-    }
+    };
 
     this.storeGroupBy = function(set_id, attribute, group_map, sort_bool, sort_attr, user_auth) {
 		var fdatum = {
@@ -495,7 +479,7 @@ function GPUdb() {
 		};
 
 		return this.make_request("/storegroupby", fdatum);
-    }
+    };
 
     this.unique = function(set_id, attribute, user_auth, succeeded, failed) {
 		var fdatum = {
@@ -505,7 +489,7 @@ function GPUdb() {
 		};
 
 		return this.make_request("/unique", fdatum, succeeded, failed);
-    }
+    };
     
     this.selectdelete = function(set_id, expression, user_auth, succeeded, failed) {
     	var fdatum = {
@@ -515,7 +499,7 @@ function GPUdb() {
     	};
     	
     	return this.make_request("/selectdelete", fdatum, succeeded, failed);
-    }
+    };
     
     this.selectupdate = function(set_id, expression, new_values_map, user_auth, succeeded, failed) {
     	var fdatum = {
@@ -526,7 +510,7 @@ function GPUdb() {
     	};
 
     	return this.make_request("/selectupdate", fdatum, succeeded, failed);
-    }
+    };
 }
 
 function GPUdbType(type_id, semantic_type, type_label) {
@@ -548,11 +532,11 @@ function Set(gc, set_id, type_id, semantic_type, type_label) {
 }
 
 Set.prototype.addChild = function(_set) {
-    if(this.set_type == "parent") {
+    if(this.set_type === "parent") {
 		this._client.consoleLog("actually attempting to push child in:" + _set.set_id);
 		this.children[_set.set_id] = _set;
     }
-}
+};
 
 Set.prototype.boundingBox = function(min_x, min_y, max_x, max_y) {
 	var x_map = "x";
@@ -562,7 +546,7 @@ Set.prototype.boundingBox = function(min_x, min_y, max_x, max_y) {
 	var stats = this._client.boundingBox(this.set_id, min_x, min_y, max_x, max_y, x_map, y_map, null, dest_id);
 
 	return this.buildset(stats, nextset);
-}
+};
 
 Set.prototype.buildset = function(stats, nextset) {
 	nextset.set_size = stats.count;
@@ -580,7 +564,7 @@ Set.prototype.buildset = function(stats, nextset) {
 	}
 
 	return nextset;
-}
+};
 
 Set.prototype.filterByList = function(filter_map) {
 	var dest_id = guid();
@@ -588,7 +572,7 @@ Set.prototype.filterByList = function(filter_map) {
 	var stats = this._client.filterByList(filter_map, dest_id, this.set_id, this._client._user_auth);
 
 	return this.buildset(stats,nextset);
-}
+};
 
 Set.prototype.filterByRadius = function(x_center, y_center, radius) {
 	var dest_id = guid();
@@ -596,20 +580,24 @@ Set.prototype.filterByRadius = function(x_center, y_center, radius) {
 	var stats = new this._client.filterByRadius(dest_id, this.set_id, "x", "y", x_center, y_center, radius, this._client.user_auth);
 
 	return this.buildset(stats,nextset);
-}
+};
 
 Set.prototype.get = function(start, end) {
 	this.set_data =  this._client.getSet(this.set_id, start,end, "");
 	return this.set_data;
-}
+};
 
 Set.prototype.groupBy = function(attributes) {
 	return this._client.groupBy(this.set_id, attributes, this._client._user_auth);
-}
+};
+
+Set.prototype.groupByValue = function(attributes, value_attribute) {
+	return this._client.groupByValue(this.set_id, attributes, value_attribute, this._client._user_auth);
+};
 
 Set.prototype.histogram = function(attribute, start, end, interval) {
 	return this._client.histogram(this.set_id, attribute, start, end, interval, this._client._user_auth);
-}
+};
 
 Set.prototype.filterByNai  = function(x_vec, y_vec) {
 	var x_map = "x";
@@ -621,24 +609,24 @@ Set.prototype.filterByNai  = function(x_vec, y_vec) {
 	nextset.set_size = stats.count;
 
 	return this.buildset(stats, nextset);
-}
+};
 
 Set.prototype.push = function(object) {
 	this._client.add(this.set_id, object);
-}
+};
 
 Set.prototype.select = function(expression) {
 	var dest_id = guid();
 	var nextset = new Set(this._client, dest_id, "", this.semantic_type, this.type_label);
 	var stats = this._client.select(expression, dest_id, this.set_id, this._client._user_auth);
 	return this.buildset(stats, nextset);
-}
+};
 
 Set.prototype.stats = function() {
 	console.log("stats called" + this.set_id);
 	return this._client.stats(this.set_id);
-}
+};
 
 Set.prototype.storeGroupBy = function(attribute, group_map, sort_bool, sort_attr) {
 	return this._client.storeGroupBy(this.set_id, attribute, group_map, sort_bool, sort_attr, this._client._user_auth);
-}
+};
