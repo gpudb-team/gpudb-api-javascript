@@ -133,16 +133,16 @@ function GPUdb() {
 		this.consoleLog("opening connection to: " + this._server_url);
 	};
 
-    this.add = function(set_id, object) {
-		var fdatum = {
-			object_data: '',
-			object_data_str: JSON.stringify(object),
-			object_encoding: "JSON",
-			set_id: set_id
-		};
+    this.add = function(set_id, object, succeeded, failed) {
+ 		var fdatum = {
+ 			object_data: '',
+ 			object_data_str: JSON.stringify(object),
+ 			object_encoding: "JSON",
+ 			set_id: set_id
+ 		};
 
-		return this.make_request("/add", fdatum);
-    };
+ 		return this.make_request("/add", fdatum, succeeded, failed);
+     };
   
     this.boundingBox = function(set_id, min_x, min_y, max_x, max_y, x_map, y_map, user_auth, dest_id, succeeded, failed) {
         var fdatum = {
@@ -175,6 +175,16 @@ function GPUdb() {
 		tempset.set_type = "parent";
 		tempset.set_id = set_id;
 		return tempset;
+    };
+	
+    this.deleteObject = function(set_ids, object_id, user_auth, succeeded, failed) {
+		var fdatum = {
+			set_ids: set_ids,
+			OBJECT_ID: object_id,
+			user_auth_string: user_auth || this._user_auth
+		};
+
+		return this.make_request("/deleteobject", fdatum, succeeded, failed);
     };
 
     this.filterByBounds = function(set_id, dest_id, attribute, lowerBound, upperBound, user_auth, succeeded, failed) {
@@ -276,6 +286,7 @@ function GPUdb() {
     	
     	return this.make_request("/filterbyvalue", fdatum, succeeded, failed);
     };
+	
     
     this.getSet = function(set_id, start, end, user_auth, succeeded, failed) {
 		var fdatum = {
@@ -302,6 +313,34 @@ function GPUdb() {
 			for (var i = 0; i < strList.length; ++i) data_arr.push(JSON.parse(strList[i]));
 			
 			return data_arr;
+		}
+    };
+	
+    this.getSetWithObjectIds = function(set_id, start, end, user_auth, succeeded, failed) {
+		var fdatum = {
+			start: start,
+			end: end,
+			set_id: set_id,
+			semantic_type: "",
+			user_auth_string: user_auth || this._user_auth
+		};
+
+		if (!!succeeded) {
+			// We need to intercept the succeeded function
+			var result = this.make_request("/getset", fdatum, function(r) {
+				var sl = r.list_str;
+				var da = [];
+				for (var i = 0; i < sl.length; ++i) da.push(JSON.parse(sl[i]));
+				succeeded({ object_ids: r.object_ids, objects: da });
+			}, failed);
+		} else { // Synchronous mode
+			var result = this.make_request("/getset", fdatum);
+
+			var strList = result.list_str;
+			var data_arr = [];
+			for (var i = 0; i < strList.length; ++i) data_arr.push(JSON.parse(strList[i]));
+
+			return { object_ids: result.object_ids, objects: data_arr };
 		}
     };
         
@@ -353,26 +392,45 @@ function GPUdb() {
     	return this.make_request("/maxmin", fdatum, succeeded, failed);
     };
     
-    this.newSet = function(type_object, parent_set, set_id) {
+    this.newSet = function(type_object, parent_set, set_id, succeeded, failed) {
 		var fdatum = {};
 		fdatum.set_id = set_id;
 		fdatum.parent_set_id = (parent_set && parent_set.set_id) || "";
 		fdatum.type_id = type_object.type_id;
-		
-		this.make_request("/newset", fdatum);
+                var client = this;
 
-		var tempset = new Set();
-        tempset.set_id = set_id;
-        tempset.semantic_type = type_object.semantic_type;
-        tempset.type_label = type_object.type_label;
-        tempset.type_id = type_object.type_id;
-        tempset._client = this;
+		if (!!succeeded) {
+			// We need to intercept the succeeded function
+			this.make_request("/newset", fdatum, function() {
+				var tempset = new Set();
+				tempset.set_id = set_id;
+				tempset.semantic_type = type_object.semantic_type;
+				type_object.type_label;
+				tempset.type_id = type_object.type_id;
+				tempset._client = client;
 
-        if(parent_set !== null) {
-			parent_set.addChild(tempset);
-        }
+				if(parent_set !== null) {
+					parent_set.addChild(tempset);
+				}
 
-        return tempset;
+				succeeded(tempset);
+			}, failed);
+		} else { // Synchronous mode
+			this.make_request("/newset", fdatum, succeeded, failed);
+
+			var tempset = new Set();
+			tempset.set_id = set_id;
+			tempset.semantic_type = type_object.semantic_type;
+			type_object.type_label;
+			tempset.type_id = type_object.type_id;
+			tempset._client = client;
+
+			if(parent_set !== null) {
+				parent_set.addChild(tempset);
+			}
+
+			return tempset;
+		}
     };
 
     this.populateFullTracks = function(set_id, world_set_id, result_set_id, reserved, user_auth, succeeded, failed) {
@@ -385,6 +443,15 @@ function GPUdb() {
         };
         return this.make_request("/populatefulltracks ", fdatum, succeeded, failed);
 
+    };
+	
+    this.random = function(set_id, count, param_map, succeeded, failed) {
+        var fdatum = {
+            set_id: set_id,
+            count: count,
+            param_map: param_map
+        };
+        return this.make_request("/random", fdatum, succeeded, failed);
     };
 
     this.registerTriggerNai = function(trigger_name, set_id, x_attribute, y_attribute, x_vector, y_vector, id_attr) {
@@ -402,33 +469,45 @@ function GPUdb() {
 		connect(res.trigger_id);
     };
 
-    this.registerType = function(object, stype, tlabel, annotation_id) {
-		var type_def = {};
-		type_def["type"] = "record";
-		type_def["name"] = "point";
-		type_def["fields"] = [];
+    this.registerType = function(object, stype, tlabel, annotation_id, succeeded, failed) {
+ 		var type_def = {};
+ 		type_def["type"] = "record";
+ 		type_def["name"] = "point";
+ 		type_def["fields"] = [];
+                 var types = this._types;
 
-		for(var name in object) {
-			var value = object[name];
-			var temp_field = {};
-			temp_field["name"] = name;
-			temp_field["type"] = (typeof value === "number") ? "double" : "string";
-			type_def.fields.push(temp_field);
-		}
+ 		for(var name in object) {
+ 			var value = object[name];
+ 			var temp_field = {};
+ 			temp_field["name"] = name;
+ 			temp_field["type"] = (typeof value === "number") ? "double" : "string";
+ 			type_def.fields.push(temp_field);
+ 		}
 
-		var fdatum = {
-			type_definition: JSON.stringify(type_def),
-			annotation: annotation_id,
-			label: tlabel,
-			semantic_type: stype
-		};
+ 		var fdatum = {
+ 			type_definition: JSON.stringify(type_def),
+ 			annotation: annotation_id,
+ 			label: tlabel,
+ 			semantic_type: stype
+ 		};
 
-		object.type_id = this.make_request("/registertype", fdatum).type_id;
-        
-        var temp = new GPUdbType(object.type_id, stype,tlabel);
-        this._types[temp.type_id] = temp;
-        return temp;
-    };
+ 		if (!!succeeded) {
+                     	// We need to intercept the succeeded function
+ 			this.make_request("/registertype", fdatum, function(r) {
+ 				object.type_id = r.type_id;
+
+ 				var temp = new GPUdbType(object.type_id, stype,tlabel);
+ 				types[temp.type_id] = temp;
+ 				succeeded(temp);
+ 			}, failed);
+                 } else { // Synchronous mode
+ 			object.type_id = this.make_request("/registertype", fdatum, succeeded, failed).type_id;
+
+         		var temp = new GPUdbType(object.type_id, stype,tlabel);
+         		types[temp.type_id] = temp;
+         		return temp;
+ 		}
+     };
 
     this.select = function(expression, dest_id, set_id, user_auth, succeeded, failed) {
 		var fdatum = {
@@ -440,6 +519,12 @@ function GPUdb() {
 
 		return this.make_request("/select", fdatum, succeeded, failed);
     };
+	
+	this.serverStatus = function(option, succeeded, failed) {
+			var fdatum = {option: option};
+			return this.make_request("/serverstatus", fdatum, succeeded, failed);
+	};
+	
 
     this.setInfo = function(set_id, succeeded, failed) {
 		var fdatum = {set_ids: [set_id]};
@@ -489,6 +574,19 @@ function GPUdb() {
 		};
 
 		return this.make_request("/unique", fdatum, succeeded, failed);
+    };
+	
+    this.updateObject = function(set_ids, object_id, object, user_auth, succeeded, failed) {
+		var fdatum = {
+			set_ids: set_ids,
+			OBJECT_ID: object_id,
+			object_data: "",
+			object_data_str: JSON.stringify(object),
+			object_encoding: "JSON",
+			user_auth_string: user_auth || this._user_auth
+		};
+
+		return this.make_request("/updateobject", fdatum, succeeded, failed);
     };
     
     this.selectdelete = function(set_id, expression, user_auth, succeeded, failed) {
