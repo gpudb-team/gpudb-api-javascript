@@ -50,9 +50,9 @@ function GPUdb() {
 	this.request = {};
 	this.verbose = false;
 	this.timeoutMilliseconds = 1000 * 60; // 1 minute
-	
+
 	//console.log("To turn off GPUdb JavaScript API console logging, set verbose=false on the GPUdb object.");
-	
+
     this.make_request = function(endpoint, fdatum, succeeded, failed) {
 		var data_arr = {};
 		var startMs = new Date().getTime();
@@ -138,12 +138,25 @@ function GPUdb() {
  			object_data: '',
  			object_data_str: JSON.stringify(object),
  			object_encoding: "JSON",
- 			set_id: set_id
+ 			set_id: set_id,
+ 			params: {}
  		};
 
  		return this.make_request("/add", fdatum, succeeded, failed);
      };
-  
+
+    this.addWithParams = function(set_id, object, params, succeeded, failed) {
+ 		var fdatum = {
+ 			object_data: '',
+ 			object_data_str: JSON.stringify(object),
+ 			object_encoding: "JSON",
+ 			set_id: set_id,
+ 			params: params
+ 		};
+
+ 		return this.make_request("/add", fdatum, succeeded, failed);
+     };
+
     this.boundingBox = function(set_id, min_x, min_y, max_x, max_y, x_map, y_map, user_auth, dest_id, succeeded, failed) {
         var fdatum = {
 			min_x: min_x,
@@ -156,7 +169,7 @@ function GPUdb() {
 			result_set_id: dest_id,
 			user_auth_string: user_auth || this._user_auth
 		};
-        
+
         return this.make_request("/boundingbox", fdatum, succeeded, failed);
     };
 
@@ -168,7 +181,7 @@ function GPUdb() {
 
 		return this.make_request("/clear", fdatum, succeeded, failed);
     };
-  
+
     this.createParentSet = function(set_id) {
 		var tempset = new Set();
 		tempset._client = this;
@@ -176,7 +189,7 @@ function GPUdb() {
 		tempset.set_id = set_id;
 		return tempset;
     };
-	
+
     this.deleteObject = function(set_ids, object_id, user_auth, succeeded, failed) {
 		var fdatum = {
 			set_ids: set_ids,
@@ -199,7 +212,7 @@ function GPUdb() {
 
 		return this.make_request("/filterbybounds", fdatum, succeeded, failed);
     };
-	
+
     this.filterByList = function(filter_map, dest_id, set_id, user_auth, succeeded, failed) {
 		var fdatum = {
 			attribute_map: filter_map,
@@ -210,7 +223,7 @@ function GPUdb() {
 
 		return this.make_request("/filterbylist", fdatum, succeeded, failed);
     };
-	
+
     this.filterByNai = function(result_set_id, set_id, x_attribute, y_attribute, x_vector, y_vector, user_auth, succeeded, failed) {
             var fdatum = {
                     result_set_id: result_set_id,
@@ -239,7 +252,7 @@ function GPUdb() {
 
 		return this.make_request("/filterbyradius", fdatum, succeeded, failed);
     };
-    
+
     this.filterByString = function(expression, mode, options, set_id, attributes, result_set_id, user_auth, succeeded, failed) {
     	var fdatum = {
 			expression: expression,
@@ -250,10 +263,10 @@ function GPUdb() {
 			result_set_id: result_set_id,
 			user_auth_string: user_auth || this._user_auth
 		};
-    	
+
     	return this.make_request("/filterbystring", fdatum, succeeded, failed);
     };
-    
+
     this.filterByTrackRequest = function(set_id, track_id, spatial_radius, time_radius, spatial_distance_metric, target_track_ids,
         result_set_id, user_auth, succeeded, failed) {
         if(spatial_distance_metric !== null)
@@ -272,22 +285,22 @@ function GPUdb() {
         };
         return this.make_request("/filterbytrack ", fdatum, succeeded, failed);
     };
-    
+
     this.filterByValue = function(set_id, attribute, val, result_set_id, user_auth, succeeded, failed) {
     	var fdatum = {
 			set_id: set_id,
 			is_string: (typeof val === "string"),
-			value: Number(val) || 0,
-			value_str: val,
+			value: (typeof val === "string"? 0.0 : Number(val)),
+			value_str: (typeof val === "string"? val : ""),
 			attribute: attribute,
 			result_set_id: result_set_id,
 			user_auth_string: user_auth || this._user_auth
 		};
-    	
+
     	return this.make_request("/filterbyvalue", fdatum, succeeded, failed);
     };
-	
-    
+
+
     this.getSet = function(set_id, start, end, user_auth, succeeded, failed) {
 		var fdatum = {
 			start: start,
@@ -296,7 +309,7 @@ function GPUdb() {
 			semantic_type: "",
 			user_auth_string: user_auth || this._user_auth
 		};
-		
+
 		if (!!succeeded) {
 			// We need to intercept the succeeded function
 			var result = this.make_request("/getset", fdatum, function(r) {
@@ -307,15 +320,15 @@ function GPUdb() {
 			}, failed);
 		} else { // Synchronous mode
 			var result = this.make_request("/getset", fdatum);
-			
+
 			var strList = result.list_str;
 			var data_arr = [];
 			for (var i = 0; i < strList.length; ++i) data_arr.push(JSON.parse(strList[i]));
-			
+
 			return data_arr;
 		}
     };
-	
+
     this.getSetWithObjectIds = function(set_id, start, end, user_auth, succeeded, failed) {
 		var fdatum = {
 			start: start,
@@ -343,7 +356,7 @@ function GPUdb() {
 			return { object_ids: result.object_ids, objects: data_arr };
 		}
     };
-        
+
     this.groupBy = function(set_id, attributes, user_auth) {
 		var fdatum = {
 			set_id: set_id,
@@ -388,10 +401,10 @@ function GPUdb() {
 			set_id: set_id,
 			user_auth_string: user_auth || this._user_auth
 		};
-    	
+
     	return this.make_request("/maxmin", fdatum, succeeded, failed);
     };
-    
+
     this.newSet = function(type_object, parent_set, set_id, succeeded, failed) {
 		var fdatum = {};
 		fdatum.set_id = set_id;
@@ -444,7 +457,7 @@ function GPUdb() {
         return this.make_request("/populatefulltracks ", fdatum, succeeded, failed);
 
     };
-	
+
     this.random = function(set_id, count, param_map, succeeded, failed) {
         var fdatum = {
             set_id: set_id,
@@ -519,12 +532,12 @@ function GPUdb() {
 
 		return this.make_request("/select", fdatum, succeeded, failed);
     };
-	
+
 	this.serverStatus = function(option, succeeded, failed) {
 			var fdatum = {option: option};
 			return this.make_request("/serverstatus", fdatum, succeeded, failed);
 	};
-	
+
 
     this.setInfo = function(set_id, succeeded, failed) {
 		var fdatum = {set_ids: [set_id]};
@@ -575,7 +588,7 @@ function GPUdb() {
 
 		return this.make_request("/unique", fdatum, succeeded, failed);
     };
-	
+
     this.updateObject = function(set_ids, object_id, object, user_auth, succeeded, failed) {
 		var fdatum = {
 			set_ids: set_ids,
@@ -588,17 +601,17 @@ function GPUdb() {
 
 		return this.make_request("/updateobject", fdatum, succeeded, failed);
     };
-    
+
     this.selectdelete = function(set_id, expression, user_auth, succeeded, failed) {
     	var fdatum = {
     		set_id: set_id,
     		expression: expression,
     		user_auth_string: user_auth || this._user_auth
     	};
-    	
+
     	return this.make_request("/selectdelete", fdatum, succeeded, failed);
     };
-    
+
     this.selectupdate = function(set_id, expression, new_values_map, user_auth, succeeded, failed) {
     	var fdatum = {
     		set_id: set_id,
